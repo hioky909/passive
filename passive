@@ -9,8 +9,8 @@ import urllib.request
 from pathlib import Path
 
 VERSION = "1.0.0"
-FALLBACK_LAT = 13.731
-FALLBACK_LON = -1.1373
+FALLBACK_LATITUDE = 13.731
+FALLBACK_LONGITUDE = -1.1373
 PHONE_SUFFIX_MODULO = 100_000_000
 MAX_RESPONSE_SIZE = 8192
 USERNAME_NOT_FOUND_MARKERS = (
@@ -82,8 +82,8 @@ def get_ip_data(ip: str):
         return (
             "FSociety, S.A.",
             "Loopback",
-            FALLBACK_LAT,
-            FALLBACK_LON,
+            FALLBACK_LATITUDE,
+            FALLBACK_LONGITUDE,
         )
 
     safe_ip = urllib.parse.quote(ip, safe="")
@@ -113,8 +113,8 @@ def username_exists(url: str):
     except (urllib.error.URLError, TimeoutError):
         return None
 
-    lowered = body.lower()
-    return not any(marker in lowered for marker in USERNAME_NOT_FOUND_MARKERS)
+    lowered_body = body.lower()
+    return not any(marker in lowered_body for marker in USERNAME_NOT_FOUND_MARKERS)
 
 
 def check_username(username: str):
