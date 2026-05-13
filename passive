@@ -9,8 +9,9 @@ import urllib.request
 from pathlib import Path
 
 VERSION = "1.0.0"
-LOOPBACK_FALLBACK_LAT = 13.731
-LOOPBACK_FALLBACK_LON = -1.1373
+DEFAULT_LAT = 13.731
+DEFAULT_LON = -1.1373
+PHONE_NUMBER_RANGE = 10_000_000
 
 
 def request_json(url: str):
@@ -54,7 +55,7 @@ def get_directory_data(full_name: str):
         return result["phone"], address
     except (KeyError, urllib.error.URLError, TimeoutError):
         first_name, last_name = parse_full_name(full_name)
-        phone = f"+336{abs(hash(key)) % 10_000_000:07d}"
+        phone = f"+336{abs(hash(key)) % PHONE_NUMBER_RANGE:07d}"
         address = f"{len(first_name) + len(last_name)} rue {last_name}\n75000 Paris"
         return phone, address
 
@@ -69,8 +70,8 @@ def get_ip_data(ip: str):
         return (
             "FSociety, S.A.",
             "Loopback",
-            LOOPBACK_FALLBACK_LAT,
-            LOOPBACK_FALLBACK_LON,
+            DEFAULT_LAT,
+            DEFAULT_LON,
         )
 
     safe_ip = urllib.parse.quote(ip, safe="")
