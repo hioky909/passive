@@ -196,7 +196,7 @@ def main():
             output = (
                 f"ISP: {isp}\n"
                 f"City: {city}\n"
-                f"Lat/Lon:\t({lat}) / ({lon})"
+                f"Lat/Lon: ({lat}) / ({lon})"
             )
         else:
             clean, results = check_username(args.u)
@@ -204,7 +204,7 @@ def main():
             for network, exists in results.items():
                 lines.append(f"{network} : {'yes' if exists else 'no'}")
             output = "\n".join(lines)
-    except (ValueError, KeyError, urllib.error.URLError, TimeoutError) as exc:
+    except (ValueError, urllib.error.URLError, TimeoutError) as exc:
         parser.error(str(exc))
         return
 
