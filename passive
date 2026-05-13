@@ -11,7 +11,7 @@ from pathlib import Path
 VERSION = "1.0.0"
 FALLBACK_LAT = 13.731
 FALLBACK_LON = -1.1373
-PHONE_SUFFIX_MODULO = 10_000_000
+PHONE_SUFFIX_MODULO = 100_000_000
 MAX_RESPONSE_SIZE = 8192
 USERNAME_NOT_FOUND_MARKERS = (
     "page not found",
@@ -67,7 +67,7 @@ def get_directory_data(full_name: str):
     except (KeyError, urllib.error.URLError, TimeoutError):
         first_name, last_name = parse_full_name(full_name)
         stable_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()
-        phone = f"+336{int(stable_hash, 16) % PHONE_SUFFIX_MODULO:07d}"
+        phone = f"+336{int(stable_hash, 16) % PHONE_SUFFIX_MODULO:08d}"
         address = f"{len(first_name) + len(last_name)} rue {last_name}\n75000 Paris"
         return phone, address
 
@@ -206,7 +206,6 @@ def main():
             output = "\n".join(lines)
     except (ValueError, urllib.error.URLError, TimeoutError) as exc:
         parser.error(str(exc))
-        return
 
     result_file = next_result_file(Path.cwd())
     result_file.write_text(output + "\n", encoding="utf-8")
