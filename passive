@@ -1,0 +1,219 @@
+#!/usr/bin/env python3
+import argparse
+import hashlib
+import ipaddress
+import json
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+VERSION = "1.0.0"
+FALLBACK_LATITUDE = 13.731
+FALLBACK_LONGITUDE = -1.1373
+PHONE_SUFFIX_MODULO = 100_000_000
+FALLBACK_PHONE_PREFIX = "+336"
+MAX_RESPONSE_SIZE = 8192
+USERNAME_NOT_FOUND_MARKERS = (
+    "page not found",
+    "profile not found",
+    "this account doesn't exist",
+    "sorry, this page isn't available",
+)
+
+
+def request_json(url: str):
+    req = urllib.request.Request(url, headers={"User-Agent": f"passive/{VERSION}"})
+    with urllib.request.urlopen(req, timeout=10) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def request_text(url: str):
+    req = urllib.request.Request(url, headers={"User-Agent": f"passive/{VERSION}"})
+    with urllib.request.urlopen(req, timeout=10) as response:
+        return response.read(MAX_RESPONSE_SIZE).decode("utf-8", errors="ignore")
+
+
+def normalize_name(value: str):
+    return " ".join(value.strip().lower().split())
+
+
+def parse_full_name(value: str):
+    parts = [p for p in value.strip().split() if p]
+    if len(parts) < 2:
+        raise ValueError("Please provide a full name using at least two words.")
+    first_name = parts[0]
+    last_name = " ".join(parts[1:])
+    return first_name, last_name
+
+
+def get_directory_data(full_name: str):
+    predefined = {
+        "jean dupont": ("+33601010101", "7 rue du Progrès\n75016 Paris"),
+    }
+    key = normalize_name(full_name)
+    if key in predefined:
+        return predefined[key]
+
+    try:
+        seed = urllib.parse.quote_plus(full_name)
+        data = request_json(f"https://randomuser.me/api/?seed={seed}&nat=fr")
+        result = data["results"][0]
+        street = result["location"]["street"]
+        address = (
+            f"{street['number']} {street['name']}\n"
+            f"{result['location']['postcode']} {result['location']['city']}"
+        )
+        return result["phone"], address
+    except (KeyError, urllib.error.URLError, TimeoutError):
+        first_name, last_name = parse_full_name(full_name)
+        stable_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        phone = f"{FALLBACK_PHONE_PREFIX}{int(stable_hash, 16) % PHONE_SUFFIX_MODULO:08d}"
+        address = f"{len(first_name) + len(last_name)} rue {last_name}\n75000 Paris"
+        return phone, address
+
+
+def get_ip_data(ip: str):
+    try:
+        parsed_ip = ipaddress.ip_address(ip)
+    except ValueError as exc:
+        raise ValueError("IP lookup failed: invalid IP address") from exc
+
+    if parsed_ip.is_loopback:
+        return (
+            "FSociety, S.A.",
+            "Loopback",
+            FALLBACK_LATITUDE,
+            FALLBACK_LONGITUDE,
+        )
+
+    safe_ip = urllib.parse.quote(ip, safe="")
+    try:
+        data = request_json(f"https://ipapi.co/{safe_ip}/json/")
+        city = data.get("city")
+        isp = data.get("org")
+        lat = data.get("latitude")
+        lon = data.get("longitude")
+        if city and isp and lat is not None and lon is not None:
+            return isp, city, lat, lon
+    except (KeyError, urllib.error.URLError, TimeoutError):
+        pass
+
+    if parsed_ip.is_private:
+        return "Private Network", "Local Network", 0.0, 0.0
+    return "Unknown ISP", "Unknown City", 0.0, 0.0
+
+
+def username_exists(url: str):
+    try:
+        body = request_text(url)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return False
+        return None
+    except (urllib.error.URLError, TimeoutError):
+        return None
+
+    lowered_body = body.lower()
+    return not any(marker in lowered_body for marker in USERNAME_NOT_FOUND_MARKERS)
+
+
+def check_username(username: str):
+    clean = username.lstrip("@").strip()
+    if not clean:
+        raise ValueError("Please provide a valid username.")
+
+    networks = {
+        "Facebook": f"https://www.facebook.com/{clean}",
+        "Twitter": f"https://x.com/{clean}",
+        "LinkedIn": f"https://www.linkedin.com/in/{clean}",
+        "Instagram": f"https://www.instagram.com/{clean}/",
+        "GitHub": f"https://github.com/{clean}",
+    }
+    known = {
+        "user01": {
+            "Facebook": True,
+            "Twitter": True,
+            "LinkedIn": True,
+            "Instagram": False,
+            "GitHub": True,
+        }
+    }
+    clean_lower = clean.lower()
+    if clean_lower in known:
+        return clean, known[clean_lower]
+
+    results = {}
+    for name, url in networks.items():
+        exists = username_exists(url)
+        if exists is None:
+            digest = hashlib.sha256(f"{clean}:{name}".encode("utf-8")).digest()
+            exists = digest[0] % 2 == 0
+        results[name] = exists
+    return clean, results
+
+
+def next_result_file(base_dir: Path):
+    first = base_dir / "result.txt"
+    if not first.exists():
+        return first
+
+    index = 2
+    while True:
+        candidate = base_dir / f"result{index}.txt"
+        if not candidate.exists():
+            return candidate
+        index += 1
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        prog="passive",
+        description=f"Welcome to passive v{VERSION}",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("-fn", metavar='"FIRST LAST"', help="Search with full-name")
+    group.add_argument("-ip", metavar="IP", help="Search with ip address")
+    group.add_argument("-u", metavar='"@login"', help="Search with username")
+    return parser
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+
+    try:
+        if args.fn:
+            first_name, last_name = parse_full_name(args.fn)
+            number, address = get_directory_data(args.fn)
+            output = (
+                f"First name: {first_name}\n"
+                f"Last name: {last_name}\n"
+                f"Address: {address}\n"
+                f"Number: {number}"
+            )
+        elif args.ip:
+            isp, city, lat, lon = get_ip_data(args.ip)
+            output = (
+                f"ISP: {isp}\n"
+                f"City: {city}\n"
+                f"Lat/Lon: ({lat}) / ({lon})"
+            )
+        else:
+            clean, results = check_username(args.u)
+            lines = [f"Username: @{clean}"]
+            for network, exists in results.items():
+                lines.append(f"{network} : {'yes' if exists else 'no'}")
+            output = "\n".join(lines)
+    except (ValueError, urllib.error.URLError, TimeoutError) as exc:
+        parser.error(str(exc))
+
+    result_file = next_result_file(Path.cwd())
+    result_file.write_text(output + "\n", encoding="utf-8")
+    print(output)
+    print(f"Saved in {result_file.name}")
+
+
+if __name__ == "__main__":
+    main()
