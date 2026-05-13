@@ -9,6 +9,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+LOOPBACK_LAT = 13.731
+LOOPBACK_LON = -1.1373
+
 
 def request_json(url: str):
     req = urllib.request.Request(url, headers={"User-Agent": "passive/1.0"})
@@ -63,7 +66,7 @@ def get_ip_data(ip: str):
         raise ValueError("IP lookup failed: invalid IP address") from exc
 
     if parsed_ip.is_loopback:
-        return "FSociety, S.A.", "Loopback", 13.731, -1.1373
+        return "FSociety, S.A.", "Loopback", LOOPBACK_LAT, LOOPBACK_LON
 
     safe_ip = urllib.parse.quote(ip, safe="")
     try:
@@ -90,9 +93,6 @@ def username_exists(url: str):
     except (urllib.error.URLError, TimeoutError):
         return None
 
-    if status == 404:
-        return None
-
     lowered = body.lower()
     markers = [
         "page not found",
@@ -111,17 +111,17 @@ def check_username(username: str):
     networks = {
         "Facebook": f"https://www.facebook.com/{clean}",
         "Twitter": f"https://x.com/{clean}",
-        "Linkedin": f"https://www.linkedin.com/in/{clean}",
+        "LinkedIn": f"https://www.linkedin.com/in/{clean}",
         "Instagram": f"https://www.instagram.com/{clean}/",
-        "Github": f"https://github.com/{clean}",
+        "GitHub": f"https://github.com/{clean}",
     }
     known = {
         "user01": {
             "Facebook": True,
             "Twitter": True,
-            "Linkedin": True,
+            "LinkedIn": True,
             "Instagram": False,
-            "Github": True,
+            "GitHub": True,
         }
     }
     if clean.lower() in known:

@@ -52,9 +52,9 @@ Output includes:
 Checks at least 5 social networks:
 - Facebook
 - Twitter
-- Linkedin
+- LinkedIn
 - Instagram
-- Github
+- GitHub
 
 ## Results file
 
